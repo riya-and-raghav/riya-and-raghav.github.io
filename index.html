@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riya & Raghav</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #1a1a2e;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #f0f0f0;
+    }
+
+    header h1 span { color: #e07a5f; }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      font-size: 0.8rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #map {
+      flex: 1;
+      min-height: 0;
+    }
+
+    #map.picking {
+      cursor: crosshair !important;
+    }
+
+    .sidebar {
+      width: 320px;
+      background: #141425;
+      border-left: 1px solid #2a2a4a;
+      overflow-y: auto;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .section-header {
+      font-size: 0.75rem;
+      padding: 14px 16px 8px;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 700;
+      position: sticky;
+      top: 0;
+      background: #141425;
+      z-index: 1;
+      border-bottom: 1px solid #1e1e3a;
+    }
+
+    .place-list { list-style: none; }
+
+    .place-item {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1e1e3a;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s, transform 0.15s;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+    }
+
+    .place-item:hover { background: #1e1e3a; }
+
+    .place-item.dragging {
+      opacity: 0.3;
+      transform: scale(0.97);
+    }
+
+    .drag-handle {
+      cursor: grab;
+      color: #444;
+      font-size: 11px;
+      flex-shrink: 0;
+      margin-top: 4px;
+      padding: 0 2px;
+      user-select: none;
+      letter-spacing: 1px;
+    }
+
+    .drag-handle:active { cursor: grabbing; }
+    .place-item:hover .drag-handle { color: #888; }
+
+    .place-item .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    .place-info { flex: 1; min-width: 0; }
+
+    .place-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #e0e0e0;
+    }
+
+    .place-note {
+      font-size: 0.75rem;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .place-detail {
+      font-size: 0.72rem;
+      color: #666;
+      margin-top: 4px;
+      line-height: 1.45;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+    }
+
+    .place-item:hover .place-detail,
+    .place-item.expanded .place-detail {
+      max-height: 200px;
+      opacity: 1;
+    }
+
+    .status-badge {
+      font-size: 0.6rem;
+      padding: 2px 7px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    .item-actions {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: none;
+      gap: 2px;
+    }
+
+    .place-item:hover .item-actions { display: flex; }
+
+    .item-actions button {
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    .edit-btn:hover { color: #81b29a; background: rgba(129,178,154,0.15); }
+    .delete-btn:hover { color: #e07a5f; background: rgba(224,122,95,0.1); }
+
+    .home-marker {
+      background: #e07a5f;
+      color: white;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      border: 2px solid white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .leaflet-popup-content {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 260px;
+    }
+
+    .leaflet-popup-content b { font-size: 14px; }
+
+    .popup-detail {
+      margin-top: 6px;
+      color: #555;
+      font-style: italic;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .popup-album {
+      display: inline-block;
+      margin-top: 8px;
+      background: #3d85c6;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .popup-album:hover { background: #2b6da8; }
+
+    .empty-section {
+      padding: 12px 16px;
+      color: #444;
+      font-size: 0.78rem;
+      font-style: italic;
+    }
+
+    .drop-zone {
+      transition: background 0.2s, border-color 0.2s;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      min-height: 20px;
+    }
+
+    .drop-zone.drag-over {
+      border-color: #3d85c680;
+      background: rgba(61,133,198,0.08);
+    }
+
+    .drop-zone.drag-over-planned {
+      border-color: #81b29a80;
+      background: rgba(129,178,154,0.08);
+    }
+
+    /* ── Add-place form ─────────────────────────── */
+
+    .add-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: calc(100% - 24px);
+      margin: 12px auto;
+      padding: 9px;
+      background: rgba(129,178,154,0.12);
+      color: #81b29a;
+      border: 1px dashed #81b29a55;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .add-btn:hover { background: rgba(129,178,154,0.22); }
+
+    .form-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .form-overlay.open { display: flex; }
+
+    .add-form {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 24px;
+      width: 380px;
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .add-form h3 {
+      font-size: 1rem;
+      margin-bottom: 16px;
+      color: #f0f0f0;
+    }
+
+    .form-row {
+      margin-bottom: 12px;
+    }
+
+    .form-row label {
+      display: block;
+      font-size: 0.72rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .form-row input,
+    .form-row textarea,
+    .form-row select {
+      width: 100%;
+      padding: 8px 10px;
+      background: #0f0f1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-row input:focus,
+    .form-row textarea:focus,
+    .form-row select:focus {
+      border-color: #81b29a;
+    }
+
+    .form-row textarea { resize: vertical; min-height: 60px; }
+
+    .coord-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .coord-row .form-row { flex: 1; margin-bottom: 0; }
+
+    .pick-btn {
+      padding: 8px 12px;
+      background: #e07a5f;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+      height: 35px;
+    }
+
+    .pick-btn:hover { background: #c9664d; }
+    .pick-btn.active { background: #81b29a; }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .form-actions button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-save {
+      background: #81b29a;
+      color: #0f0f0f;
+    }
+
+    .btn-save:hover { background: #6a9d84; }
+
+    .btn-cancel {
+      background: #2a2a4a;
+      color: #aaa;
+    }
+
+    .btn-cancel:hover { background: #3a3a5a; }
+
+    .pick-hint {
+      display: none;
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #e07a5f;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      z-index: 10000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    .pick-hint.show { display: block; }
+
+    @media (max-width: 700px) {
+      .main-container { flex-direction: column-reverse; }
+      .sidebar {
+        width: 100%;
+        max-height: 40vh;
+        border-left: none;
+        border-top: 1px solid #2a2a4a;
+      }
+      .legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Riya <span>&</span> Raghav</h1>
+    <div class="legend">
+      <div class="legend-item">
+        <span class="legend-dot" style="background:#e07a5f"></span> We Met Here
+      </div>
+      <div class="legend-item">
+        <span class="legend-dot" style="background:#81b29a"></span> Planned
+      </div>
+      <div class="legend-item">
+        <span class="legend-dot" style="background:#3d85c6"></span> Visited
+      </div>
+    </div>
+  </header>
+
+  <div class="pick-hint" id="pickHint">Click anywhere on the map to set coordinates</div>
+
+  <div class="main-container">
+    <div id="map"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-scroll" id="sidebarScroll"></div>
+      <button class="add-btn" id="addBtn">+ Add a place</button>
+    </aside>
+  </div>
+
+  <div class="form-overlay" id="formOverlay">
+    <div class="add-form" id="addForm">
+      <h3 id="formTitle">Add a Place</h3>
+
+      <div class="form-row">
+        <label>Name *</label>
+        <input type="text" id="fName" placeholder="e.g. Santorini" />
+      </div>
+
+      <div class="form-row">
+        <label>Status *</label>
+        <select id="fStatus">
+          <option value="planned">Planned</option>
+          <option value="visited">Visited</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Coordinates * <span style="color:#555; text-transform:none;">(click map or paste lat, lng)</span></label>
+        <div class="coord-row">
+          <div class="form-row">
+            <input type="text" id="fLat" placeholder="Lat" />
+          </div>
+          <div class="form-row">
+            <input type="text" id="fLng" placeholder="Lng" />
+          </div>
+          <button class="pick-btn" id="pickBtn" type="button">Pick on map</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Short note</label>
+        <input type="text" id="fNote" placeholder="One-liner for the sidebar" />
+      </div>
+
+      <div class="form-row">
+        <label>Detail / description</label>
+        <textarea id="fDetail" placeholder="The longer story that shows on hover & popup"></textarea>
+      </div>
+
+      <div class="form-row" id="albumRow" style="display:none">
+        <label>Photo album link</label>
+        <input type="text" id="fAlbum" placeholder="https://photos.google.com/share/..." />
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-cancel" id="btnCancel" type="button">Cancel</button>
+        <button class="btn-save" id="btnSave" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="places.js"></script>
+  <script>
+    const STATUS_COLORS = { planned: '#81b29a', visited: '#3d85c6' };
+    const STATUS_BG     = { planned: 'rgba(129,178,154,0.15)', visited: 'rgba(61,133,198,0.15)' };
+    const HYD = [17.385, 78.4867];
+
+    const KEY_USER      = 'rr_travel_places';
+    const KEY_OVERRIDES = 'rr_travel_overrides';
+    const KEY_HIDDEN    = 'rr_travel_hidden';
+
+    // ── localStorage helpers ───────────────────────
+
+    function loadJSON(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+      catch { return fallback; }
+    }
+
+    function loadUserPlaces()  { return loadJSON(KEY_USER, []); }
+    function loadOverrides()   { return loadJSON(KEY_OVERRIDES, {}); }
+    function loadHidden()      { return loadJSON(KEY_HIDDEN, []); }
+
+    function saveUserPlaces(v) { localStorage.setItem(KEY_USER, JSON.stringify(v)); }
+    function saveOverrides(v)  { localStorage.setItem(KEY_OVERRIDES, JSON.stringify(v)); }
+    function saveHidden(v)     { localStorage.setItem(KEY_HIDDEN, JSON.stringify(v)); }
+
+    function slugify(name) {
+      return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    }
+
+    // ── Map setup ──────────────────────────────────
+
+    const map = L.map('map', { center: HYD, zoom: 4, zoomControl: true });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const homeIcon = L.divIcon({
+      className: '',
+      html: '<div class="home-marker">&#9829;</div>',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    L.marker(HYD, { icon: homeIcon })
+      .addTo(map)
+      .bindPopup('<b>Hyderabad</b><br><span class="popup-detail">Two idiots walked into a city famous for biryani. Only the biryani made sense. The rest is an ongoing diagnostic.</span>');
+
+    function makeIcon(color) {
+      return L.divIcon({
+        className: '',
+        html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+    }
+
+    function buildPopup(place) {
+      let html = `<b>${place.name}</b>`;
+      if (place.note)   html += `<br>${place.note}`;
+      if (place.detail) html += `<div class="popup-detail">${place.detail}</div>`;
+      if (place.album)  html += `<a class="popup-album" href="${place.album}" target="_blank" rel="noopener">📸 Photo Album</a>`;
+      return html;
+    }
+
+    // ── Rendering ──────────────────────────────────
+
+    let mapLayers = [];
+
+    function clearMap() {
+      mapLayers.forEach(l => map.removeLayer(l));
+      mapLayers = [];
+    }
+
+    function getAllPlaces() {
+      const overrides = loadOverrides();
+      const hidden    = loadHidden();
+
+      const base = PLACES
+        .map(p => {
+          const id = p._id || slugify(p.name);
+          return { ...p, _id: id, _source: 'base' };
+        })
+        .filter(p => !hidden.includes(p._id))
+        .map(p => overrides[p._id] ? { ...p, ...overrides[p._id], _id: p._id, _source: 'base' } : p);
+
+      const user = loadUserPlaces().map(p => ({ ...p, _source: 'user' }));
+      return [...base, ...user];
+    }
+
+    function renderAll() {
+      clearMap();
+      const container = document.getElementById('sidebarScroll');
+      container.innerHTML = '';
+
+      const all     = getAllPlaces();
+      const planned = all.filter(p => p.status === 'planned');
+      const visited = all.filter(p => p.status === 'visited');
+
+      renderSection('Planned', planned, container);
+      renderSection('Visited', visited, container);
+    }
+
+    let draggedPlace = null;
+
+    function changeStatus(place, newStatus) {
+      if (place.status === newStatus) return;
+
+      if (place._source === 'base') {
+        const overrides = loadOverrides();
+        overrides[place._id] = { ...(overrides[place._id] || {}), status: newStatus };
+        saveOverrides(overrides);
+      } else {
+        const userPlaces = loadUserPlaces();
+        const idx = userPlaces.findIndex(p => p._id === place._id);
+        if (idx >= 0) {
+          userPlaces[idx].status = newStatus;
+          saveUserPlaces(userPlaces);
+        }
+      }
+      renderAll();
+    }
+
+    function setupDropZone(el, targetStatus) {
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.classList.add(targetStatus === 'planned' ? 'drag-over-planned' : 'drag-over');
+      });
+
+      el.addEventListener('dragleave', () => {
+        el.classList.remove('drag-over', 'drag-over-planned');
+      });
+
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('drag-over', 'drag-over-planned');
+        if (draggedPlace) {
+          changeStatus(draggedPlace, targetStatus);
+          draggedPlace = null;
+        }
+      });
+    }
+
+    function renderSection(title, places, container) {
+      const status = title.toLowerCase();
+
+      const h = document.createElement('div');
+      h.className = 'section-header';
+      h.textContent = `${title} (${places.length})`;
+      container.appendChild(h);
+
+      const ul = document.createElement('ul');
+      ul.className = 'place-list drop-zone';
+      ul.dataset.status = status;
+      setupDropZone(ul, status);
+
+      if (places.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'empty-section';
+        empty.textContent = title === 'Visited'
+          ? 'Nothing yet. Get off the couch. (or drag one here)'
+          : 'No plans? Seriously? (drag one here)';
+        ul.appendChild(empty);
+        container.appendChild(ul);
+        return;
+      }
+
+      places.forEach((place) => {
+        const color = STATUS_COLORS[place.status] || '#ccc';
+
+        const marker = L.marker(place.coords, { icon: makeIcon(color) })
+          .addTo(map)
+          .bindPopup(buildPopup(place), { maxWidth: 280 });
+        mapLayers.push(marker);
+
+        const line = L.polyline([HYD, place.coords], {
+          color, weight: 1.5, opacity: 0.3, dashArray: '6 4',
+        }).addTo(map);
+        mapLayers.push(line);
+
+        const li = document.createElement('li');
+        li.className = 'place-item';
+        li.draggable = true;
+        li.innerHTML = `
+          <span class="drag-handle" title="Drag to move">⠿</span>
+          <span class="dot" style="background:${color}"></span>
+          <div class="place-info">
+            <div class="place-name">${place.name}</div>
+            ${place.note   ? `<div class="place-note">${place.note}</div>` : ''}
+            ${place.detail ? `<div class="place-detail">${place.detail}</div>` : ''}
+          </div>
+          <span class="status-badge" style="background:${STATUS_BG[place.status]};color:${color}">${place.status}</span>
+          <div class="item-actions">
+            <button class="edit-btn" title="Edit">&#9998;</button>
+            <button class="delete-btn" title="Remove">&times;</button>
+          </div>
+        `;
+
+        li.addEventListener('dragstart', (e) => {
+          draggedPlace = place;
+          li.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', place._id);
+        });
+
+        li.addEventListener('dragend', () => {
+          li.classList.remove('dragging');
+          draggedPlace = null;
+          document.querySelectorAll('.drag-over, .drag-over-planned').forEach(el =>
+            el.classList.remove('drag-over', 'drag-over-planned')
+          );
+        });
+
+        li.addEventListener('click', (e) => {
+          if (e.target.closest('.item-actions') || e.target.closest('.drag-handle')) return;
+          map.setView(place.coords, 8, { animate: true });
+          marker.openPopup();
+        });
+
+        li.querySelector('.edit-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openEditForm(place);
+        });
+
+        li.querySelector('.delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!confirm(`Remove "${place.name}"?`)) return;
+
+          if (place._source === 'user') {
+            saveUserPlaces(loadUserPlaces().filter(p => p._id !== place._id));
+          } else {
+            const hidden = loadHidden();
+            hidden.push(place._id);
+            saveHidden(hidden);
+          }
+          renderAll();
+        });
+
+        ul.appendChild(li);
+      });
+
+      container.appendChild(ul);
+    }
+
+    // ── Form helpers ───────────────────────────────
+
+    const overlay  = document.getElementById('formOverlay');
+    const addBtn   = document.getElementById('addBtn');
+    const pickBtn  = document.getElementById('pickBtn');
+    const pickHint = document.getElementById('pickHint');
+    const fStatus  = document.getElementById('fStatus');
+    const albumRow = document.getElementById('albumRow');
+
+    let picking = false;
+    let editingId = null;
+    let editingSource = null;
+
+    fStatus.addEventListener('change', () => {
+      albumRow.style.display = fStatus.value === 'visited' ? '' : 'none';
+    });
+
+    function fillForm(place) {
+      document.getElementById('fName').value   = place.name   || '';
+      document.getElementById('fLat').value    = place.coords ? place.coords[0] : '';
+      document.getElementById('fLng').value    = place.coords ? place.coords[1] : '';
+      document.getElementById('fNote').value   = place.note   || '';
+      document.getElementById('fDetail').value = place.detail || '';
+      document.getElementById('fAlbum').value  = place.album  || '';
+      fStatus.value = place.status || 'planned';
+      albumRow.style.display = fStatus.value === 'visited' ? '' : 'none';
+    }
+
+    function openEditForm(place) {
+      editingId = place._id;
+      editingSource = place._source;
+      document.getElementById('formTitle').textContent = 'Edit Place';
+      fillForm(place);
+      overlay.classList.add('open');
+    }
+
+    addBtn.addEventListener('click', () => {
+      editingId = null;
+      editingSource = null;
+      document.getElementById('formTitle').textContent = 'Add a Place';
+      fillForm({ status: 'planned' });
+      overlay.classList.add('open');
+    });
+
+    document.getElementById('btnCancel').addEventListener('click', closeForm);
+
+    function closeForm() {
+      overlay.classList.remove('open');
+      stopPicking();
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeForm();
+    });
+
+    // ── Map coordinate picker ──────────────────────
+
+    pickBtn.addEventListener('click', () => {
+      if (picking) { stopPicking(); return; }
+      picking = true;
+      pickBtn.classList.add('active');
+      pickBtn.textContent = 'Picking…';
+      pickHint.classList.add('show');
+      document.getElementById('map').classList.add('picking');
+      overlay.classList.remove('open');
+    });
+
+    function stopPicking() {
+      picking = false;
+      pickBtn.classList.remove('active');
+      pickBtn.textContent = 'Pick on map';
+      pickHint.classList.remove('show');
+      document.getElementById('map').classList.remove('picking');
+    }
+
+    map.on('click', (e) => {
+      if (!picking) return;
+      document.getElementById('fLat').value = e.latlng.lat.toFixed(4);
+      document.getElementById('fLng').value = e.latlng.lng.toFixed(4);
+      stopPicking();
+      overlay.classList.add('open');
+    });
+
+    // ── Save ───────────────────────────────────────
+
+    document.getElementById('btnSave').addEventListener('click', () => {
+      const name   = document.getElementById('fName').value.trim();
+      const lat    = parseFloat(document.getElementById('fLat').value);
+      const lng    = parseFloat(document.getElementById('fLng').value);
+      const status = fStatus.value;
+      const note   = document.getElementById('fNote').value.trim();
+      const detail = document.getElementById('fDetail').value.trim();
+      const album  = document.getElementById('fAlbum').value.trim();
+
+      if (!name)                    { alert('Name is required.');        return; }
+      if (isNaN(lat) || isNaN(lng)) { alert('Valid coordinates needed. Use "Pick on map" or paste lat/lng.'); return; }
+
+      const fields = {
+        name,
+        coords: [lat, lng],
+        status,
+        note:   note   || undefined,
+        detail: detail || undefined,
+        album:  (status === 'visited' && album) ? album : undefined,
+      };
+
+      if (editingSource === 'base') {
+        const overrides = loadOverrides();
+        overrides[editingId] = fields;
+        saveOverrides(overrides);
+      } else if (editingSource === 'user' && editingId) {
+        const userPlaces = loadUserPlaces();
+        const idx = userPlaces.findIndex(p => p._id === editingId);
+        const updated = { ...fields, _user: true, _id: editingId };
+        if (idx >= 0) userPlaces[idx] = updated;
+        else userPlaces.push(updated);
+        saveUserPlaces(userPlaces);
+      } else {
+        const newPlace = {
+          ...fields,
+          _user: true,
+          _id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        };
+        const userPlaces = loadUserPlaces();
+        userPlaces.push(newPlace);
+        saveUserPlaces(userPlaces);
+      }
+
+      closeForm();
+      renderAll();
+
+      setTimeout(() => map.setView([lat, lng], 8, { animate: true }), 100);
+    });
+
+    // ── Initial render ─────────────────────────────
+
+    renderAll();
+  </script>
+</body>
+</html>
